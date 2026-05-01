@@ -27,7 +27,7 @@ defaults:
 jobs:
   windows:
     if: ${{ github.event.inputs.target == 'all' || github.event.inputs.target == 'windows' }}
-    runs-on: windows-2019
+    runs-on: windows-2022
     env:
       MSVC_VERSION: 2019
       QT_VERSION: 5.15.2
