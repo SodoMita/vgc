@@ -16,11 +16,7 @@ jobs:
         with:
           fetch-depth: 100
           submodules: 'recursive'
-      - name: Query aqt
-        run:
-          python -m pip install --upgrade pip
-          pip install aqtinstall
-          aqt list-qt all_os android
+      
           
 
       - name: Set up JDK
