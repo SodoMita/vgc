@@ -5,7 +5,7 @@ on: [push, pull_request]
 env:
   CONTAINER: vgcsoftware/vgc-ci-ubuntu-18.04:2023-03-08.0
   BUILD_TYPE: Release
-  QT_VERSION: 5.12.5
+  QT_VERSION: 6.7.3
   PARALLEL_JOBS: 5
 
 jobs:
@@ -101,7 +101,7 @@ jobs:
           cmake .. \
             -DCMAKE_BUILD_TYPE="${{env.BUILD_TYPE}}" \
             -DVGC_COMMIT_BRANCH="${{env.COMMIT_BRANCH}}" \
-            -DQt5_DIR="/opt/qt/${{env.QT_VERSION}}/gcc_64/lib/cmake/Qt5" \
+            -DQt6_DIR="/opt/qt/${{env.QT_VERSION}}/gcc_64/lib/cmake/Qt6" \
             -DVGC_PEDANTIC=ON \
             -DVGC_WERROR=ON
       run: docker exec build-container bash -c "$SCRIPT"
