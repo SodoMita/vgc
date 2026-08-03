@@ -483,7 +483,11 @@ function(vgc_add_app APP_NAME)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
     
     # Add executable
-    add_executable(${APP_TARGET} WIN32 ${ARG_CPP_HEADER_FILES} ${ARG_CPP_SOURCE_FILES} ${NATVIS_FILES})
+    if(WIN32)
+        add_executable(${APP_TARGET} WIN32 ${ARG_CPP_HEADER_FILES} ${ARG_CPP_SOURCE_FILES} ${NATVIS_FILES})
+    else()
+        add_executable(${APP_TARGET} ${ARG_CPP_HEADER_FILES} ${ARG_CPP_SOURCE_FILES} ${NATVIS_FILES})
+    endif()
     if(APPLE)
         target_sources(${APP_TARGET} PRIVATE ${ARG_OBJCPP_HEADER_FILES} ${ARG_OBJCPP_SOURCE_FILES})
     endif()
