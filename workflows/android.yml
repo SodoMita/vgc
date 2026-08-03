@@ -16,7 +16,10 @@ jobs:
         with:
           fetch-depth: 100
           submodules: 'recursive'
-
+      - name: Install Python development headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3.12-dev
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
@@ -46,7 +49,9 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK"/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=arm64-v8a \
             -DANDROID_NDK="$ANDROID_NDK" \
-            -DANDROID_SDK_ROOT="$ANDROID_SDK_ROOT"
+            -DANDROID_SDK_ROOT="$ANDROID_SDK_ROOT\
+            -DPython_ROOT_DIR=/opt/hostedtoolcache/Python/3.12.13/x64 \
+            -DPython_FIND_STRATEGY=LOCATION"
         env:
           QT_ROOT_DIR: ${{ env.QT_ROOT_DIR }}
 
