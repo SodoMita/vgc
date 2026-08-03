@@ -11,6 +11,52 @@
     font-descent: 3dp;
 }
 
+/* Android uses direct touch input rather than a precision pointer. Keep the
+ * desktop density above, but give the mobile shell comfortably tappable
+ * controls and a readable tab strip. */
+.mobile {
+    font-size: 16dp;
+    font-ascent: 16dp;
+    font-descent: 5dp;
+}
+
+.mobile .Button,
+.mobile .Label,
+.mobile .LineEdit {
+    preferred-height: 44dp;
+}
+
+.mobile .Menu > .button {
+    preferred-height: 48dp;
+}
+
+.mobile .Menu.horizontal > .button {
+    preferred-height: 44dp;
+    padding-right: 10dp;
+    padding-left: 10dp;
+}
+
+.mobile .PanelArea > .Flex > .TabBar {
+    preferred-height: 44dp;
+}
+
+.mobile .PanelArea > .Flex > .TabBar .close {
+    preferred-width: 28dp;
+    preferred-height: 28dp;
+    margin-right: 8dp;
+}
+
+.mobile .mobile-dock {
+    min-height: 140dp;
+    vertical-stretch: 0;
+}
+
+.mobile .mobile-landscape-dock {
+    min-width: 160dp;
+    horizontal-stretch: 0;
+    vertical-stretch: 1;
+}
+
 .Panel > .Flex,
 .Panel > .Flex > .Flex {
     row-gap: 8dp;

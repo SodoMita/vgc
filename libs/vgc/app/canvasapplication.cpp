@@ -17,7 +17,9 @@
 #include <vgc/app/canvasapplication.h>
 
 #include <QDir>
+#include <QGuiApplication>
 #include <QMessageBox>
+#include <QScreen>
 
 #include <vgc/app/filemanager.h>
 #include <vgc/app/logcategories.h>
@@ -49,6 +51,16 @@ namespace {
 const core::Color initialColor(0.416f, 0.416f, 0.918f);
 
 core::StringId s_default_side_area("default-side-area");
+
+#if defined(Q_OS_ANDROID)
+bool isMobileLandscape_() {
+    if (QScreen* screen = QGuiApplication::primaryScreen()) {
+        QSize size = screen->availableGeometry().size();
+        return size.width() > size.height();
+    }
+    return false;
+}
+#endif
 
 } // namespace
 
@@ -235,9 +247,18 @@ void CanvasApplication::createDefaultPanels_() {
         return;
     }
 
-    // Create main panel area
+    // Create main panel area. In portrait, a bottom dock preserves the canvas
+    // width. In landscape, there is enough width for the dock at the side,
+    // which leaves more vertical space for drawing. In both cases the dock's
+    // auxiliary panels share tabs (see getOrCreatePanelDefaultArea_()).
     mainPanelArea_ = window_->mainWidget()->panelArea();
+#if defined(Q_OS_ANDROID)
+    mainPanelArea_->setType(
+        isMobileLandscape_() ? ui::PanelAreaType::HorizontalSplit
+                             : ui::PanelAreaType::VerticalSplit);
+#else
     mainPanelArea_->setType(ui::PanelAreaType::HorizontalSplit);
+#endif
 
     // Create Canvas (both the panel and the canvas itself)
     //
@@ -285,6 +306,23 @@ CanvasApplication::getOrCreatePanelDefaultArea_(ui::PanelDefaultArea area) {
     // Create PanelArea if it doesn't exist yet
     if (!panelArea_) {
 
+#if defined(Q_OS_ANDROID)
+        // A single bottom dock gives the canvas the full screen width. Keeping
+        // the auxiliary panels in tabs also avoids permanently consuming most
+        // of a portrait display with several narrow columns.
+        if (leftPanelArea_) {
+            return leftPanelArea_.get();
+        }
+        if (rightPanelArea_) {
+            return rightPanelArea_.get();
+        }
+        panelArea_ = ui::PanelArea::createTabs(mainPanelArea_.get());
+        panelArea_->addStyleClass(core::StringId("mobile-dock"));
+        if (isMobileLandscape_()) {
+            panelArea_->addStyleClass(core::StringId("mobile-landscape-dock"));
+        }
+        panelArea_->setSplitSize(180);
+#else
         // Create PanelArea and assign it to data member
         panelArea_ = ui::PanelArea::createVerticalSplit(mainPanelArea_.get());
         panelArea_->addStyleClass(s_default_side_area);
@@ -297,6 +335,7 @@ CanvasApplication::getOrCreatePanelDefaultArea_(ui::PanelDefaultArea area) {
         // Note: This given size will be automatically increased to satisfy min-size.
         // TODO: Use a system to remember the last-used size.
         panelArea_->setSplitSize(100);
+#endif
     }
     return panelArea_.get();
 }
