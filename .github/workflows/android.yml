@@ -4,7 +4,9 @@ on: [push, pull_request]
 
 env:
   BUILD_TYPE: Release
-  QT_VERSION: 6.8.*
+  QT_VERSION: 6.7.3
+  # Qt6 note: there is no "qtopenGL"/"qtopenGLwidgets" module — OpenGL and
+  # OpenGLWidgets are part of qtbase. qtdeclarative is not used by this app.
   QT_MODULES: ""
 
 jobs:
@@ -16,8 +18,6 @@ jobs:
         with:
           fetch-depth: 100
           submodules: 'recursive'
-      
-          
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -28,29 +28,120 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Install Android platform + build tools
+        run: sdkmanager "platforms;android-29" "build-tools;34.0.0"
+
+      # VGC requires Python development files (headers + libpython) for its
+      # pybind11 wrappers: CMakeLists.txt line 153 does
+      #   find_package(Python 3.6 COMPONENTS Interpreter Development REQUIRED)
+      # The runner's default Python (3.12) has no dev files. Also, the pinned
+      # third/pybind11 (2.10.x) officially supports up to Python 3.11, so
+      # install a full 3.11 with dev files and point CMake at it explicitly.
+      - name: Install Python 3.11 (with dev files)
+        run: |
+          sudo add-apt-repository -y ppa:deadsnakes/ppa
+          sudo apt-get update
+          sudo apt-get install -y python3.11 python3.11-dev
+
+      # Qt6 Android cross-compilation requires the host Qt (for moc/uic/etc.),
+      # passed to CMake as QT_HOST_PATH.
+      - name: Install Qt 6 host (desktop)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: desktop
+          arch: gcc_64
+          modules: ${{ env.QT_MODULES }}
+          cache: true
+          set-env: true
+
+      - name: Record host Qt path
+        run: echo "QT_HOST_PATH=$QT_ROOT_DIR" >> "$GITHUB_ENV"
+
       - name: Install Qt 6 for Android
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
-          host: all_os
+          host: linux
           target: android
           arch: android_arm64_v8a
           modules: ${{ env.QT_MODULES }}
           cache: true
           set-env: true
 
-      - name: Configure
+      # FreeType and HarfBuzz must also be cross-built for Android (vgc links
+      # them). Install them into the NDK sysroot so CMake's find modules
+      # locate them without ever picking up host libraries.
+      - name: Cross-build FreeType (arm64-v8a)
         run: |
-          cmake -B build -S . \
-            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-            -DVGC_QT_VERSION=6 \
-            -DQt6_DIR="$QT_ROOT_DIR/lib/cmake/Qt6" \
-            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK"/build/cmake/android.toolchain.cmake \
-            -DANDROID_ABI=arm64-v8a \
-            -DANDROID_NDK="$ANDROID_NDK" \
-            -DANDROID_SDK_ROOT="$ANDROID_SDK_ROOT"
+          export NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_SDK_ROOT/ndk/$(ls -1 "$ANDROID_SDK_ROOT/ndk" | sort -V | tail -1)}"
+          export SYSROOT="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          curl -sL -o /tmp/freetype.tar.gz https://codeload.github.com/freetype/freetype/tar.gz/refs/tags/VER-2-13-2
+          tar xzf /tmp/freetype.tar.gz -C /tmp
+          cmake -S /tmp/freetype-VER-2-13-2 -B /tmp/ft-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK_HOME/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-29 \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$SYSROOT/usr/local" \
+            -DBUILD_SHARED_LIBS=ON -DFT_DISABLE_BZIP2=ON -DFT_DISABLE_PNG=ON \
+            -DFT_DISABLE_BROTLI=ON -DFT_DISABLE_HARFBUZZ=ON -DFT_DISABLE_ZLIB=ON \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake --build /tmp/ft-build --parallel
+          cmake --install /tmp/ft-build
+
+      - name: Cross-build HarfBuzz (arm64-v8a)
+        run: |
+          export NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_SDK_ROOT/ndk/$(ls -1 "$ANDROID_SDK_ROOT/ndk" | sort -V | tail -1)}"
+          export SYSROOT="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          curl -sL -o /tmp/harfbuzz.tar.gz https://codeload.github.com/harfbuzz/harfbuzz/tar.gz/refs/tags/8.3.0
+          tar xzf /tmp/harfbuzz.tar.gz -C /tmp
+          cmake -S /tmp/harfbuzz-8.3.0 -B /tmp/hb-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK_HOME/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-29 \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$SYSROOT/usr/local" \
+            -DCMAKE_PREFIX_PATH="$SYSROOT/usr/local" \
+            -DBUILD_SHARED_LIBS=ON -DHB_HAVE_FREETYPE=ON -DHB_BUILD_UTILS=OFF \
+            -DHB_BUILD_TESTS=OFF -DHB_BUILD_BENCHMARKS=OFF -DHB_BUILD_SUBSET=OFF \
+            -DHB_HAVE_GLIB=OFF -DHB_HAVE_GRAPHITE2=OFF -DHB_HAVE_ICU=OFF \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake --build /tmp/hb-build --parallel
+          cmake --install /tmp/hb-build
+
+      # Wrap the NDK toolchain: its default find modes are ONLY (sysroot),
+      # which would hide the host Python dev files VGC needs for pybind11.
+      - name: Create toolchain wrapper
+        run: |
+          export NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_SDK_ROOT/ndk/$(ls -1 "$ANDROID_SDK_ROOT/ndk" | sort -V | tail -1)}"
+          cat > "$RUNNER_TEMP/vgc-android.toolchain.cmake" <<EOF
+          include("$NDK_HOME/build/cmake/android.toolchain.cmake")
+          set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE BOTH)
+          set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY BOTH)
+          set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)
+          EOF
+
+      - name: Configure
         env:
           QT_ROOT_DIR: ${{ env.QT_ROOT_DIR }}
+          QT_HOST_PATH: ${{ env.QT_HOST_PATH }}
+        run: |
+          export NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_SDK_ROOT/ndk/$(ls -1 "$ANDROID_SDK_ROOT/ndk" | sort -V | tail -1)}"
+          export SYSROOT="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DVGC_QT_VERSION=6 \
+            -DQt6_DIR="$QT_ROOT_DIR/lib/cmake/Qt6" \
+            -DQT_HOST_PATH="$QT_HOST_PATH" \
+            -DPython_EXECUTABLE=/usr/bin/python3.11 \
+            -DPython_ROOT_DIR=/usr \
+            -DCMAKE_TOOLCHAIN_FILE="$RUNNER_TEMP/vgc-android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-29 \
+            -DANDROID_STL=c++_shared \
+            -DANDROID_NDK="$NDK_HOME" \
+            -DANDROID_SDK_ROOT="$ANDROID_SDK_ROOT" \
+            -DHARFBUZZ_DIR="$SYSROOT/usr/local"
 
       - name: Build
         run: cmake --build build --parallel $(nproc)
@@ -58,34 +149,13 @@ jobs:
       - name: Deploy APK (androiddeployqt)
         run: |
           export PATH="$QT_ROOT_DIR/bin:$PATH"
-          ADQT=$(find "$QT_ROOT_DIR/bin" -name "androiddeployqt" | head -n1)
-          if [ -z "$ADQT" ]; then
-            echo "androiddeployqt not found"
+          SETTINGS=$(find build -name 'android-*-deployment-settings.json' | head -n1)
+          if [ -z "$SETTINGS" ]; then
+            echo "::error::No android-*-deployment-settings.json found. Qt6 only generates it for Qt Android targets (qt_add_executable/qt_add_android_app); convert vgc_add_app in CMakeLists/tools/VgcTools.cmake first."
             exit 1
           fi
-          MANIFEST="build/$BUILD_TYPE/bin/vgc_illustration_app/AndroidManifest.xml"
-          mkdir -p $(dirname $MANIFEST)
-          if [ ! -f "$MANIFEST" ]; then
-            cat > "$MANIFEST" << 'EOF'
-            <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-                package="io.vgc.illustration" android:versionCode="1" android:versionName="alpha">
-                <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="29"/>
-                <application android:label="VGC Illustration" android:icon="@mipmap/ic_launcher">
-                    <activity android:name="org.qtproject.qt5.android.bindings.QtActivity"
-                        android:configChanges="orientation|screenSize|smallestScreenSize"
-                        android:label="VGC Illustration">
-                        <intent-filter>
-                            <action android:name="android.intent.action.MAIN"/>
-                            <category android:name="android.intent.category.LAUNCHER"/>
-                        </intent-filter>
-                    </activity>
-                </application>
-            </manifest>
-            EOF
-          fi
-          $ADQT --input "$MANIFEST" --output build/android --android-platform android-29 --gradle
-        env:
-          QT_ROOT_DIR: ${{ env.QT_ROOT_DIR }}
+          mkdir -p build/android
+          androiddeployqt --input "$SETTINGS" --output build/android --android-platform android-29 --gradle
 
       - name: Upload APK
         if: always()
