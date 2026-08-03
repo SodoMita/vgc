@@ -1,9 +1,12 @@
 name: Android
+
 on: [push, pull_request]
+
 env:
   BUILD_TYPE: Release
   QT_VERSION: 6.7.3
   QT_MODULES: qtbase qtsvg qtopenGL qtopenGLwidgets qtdeclarative
+
 jobs:
   build-android:
     name: Build Android APK
@@ -13,13 +16,16 @@ jobs:
         with:
           fetch-depth: 100
           submodules: 'recursive'
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
+
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+
       - name: Install Qt 6 for Android
         uses: jurplel/install-qt-action@v4
         with:
@@ -30,6 +36,7 @@ jobs:
           modules: ${{ env.QT_MODULES }}
           cache: true
           set-env: true
+
       - name: Configure
         run: |
           cmake -B build -S . \
@@ -42,8 +49,10 @@ jobs:
             -DANDROID_SDK_ROOT="$ANDROID_SDK_ROOT"
         env:
           QT_ROOT_DIR: ${{ env.QT_ROOT_DIR }}
+
       - name: Build
         run: cmake --build build --parallel $(nproc)
+
       - name: Deploy APK (androiddeployqt)
         run: |
           export PATH="$QT_ROOT_DIR/bin:$PATH"
@@ -75,6 +84,7 @@ jobs:
           $ADQT --input "$MANIFEST" --output build/android --android-platform android-29 --gradle
         env:
           QT_ROOT_DIR: ${{ env.QT_ROOT_DIR }}
+
       - name: Upload APK
         if: always()
         uses: actions/upload-artifact@v4
