@@ -41,6 +41,10 @@ MainWidget::MainWidget(CreateKey key)
                   "    padding-left: 0dp; }";
     overlayArea_->setStyleSheet(styleSheet);
     overlayArea_->addStyleClass(ui::strings::root);
+#if defined(Q_OS_ANDROID)
+    // Keep touch targets usable without imposing the mobile metrics on desktop.
+    overlayArea_->addStyleClass(core::StringId("mobile"));
+#endif
 #ifdef VGC_OS_MACOS
     overlayArea_->addStyleClass(ui::strings::macos);
 #endif
