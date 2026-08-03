@@ -66,48 +66,68 @@ jobs:
       - name: Cross-build FreeType (arm64-v8a)
         run: |
           export NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_SDK_ROOT/ndk/$(ls -1 "$ANDROID_SDK_ROOT/ndk" | sort -V | tail -1)}"
-          export SYSROOT="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          # Install to a local workspace dir instead of the NDK sysroot
+          export INSTALL_DIR="$GITHUB_WORKSPACE/deps-android"
           curl -sL -o /tmp/freetype.tar.gz https://codeload.github.com/freetype/freetype/tar.gz/refs/tags/VER-2-13-2
           tar xzf /tmp/freetype.tar.gz -C /tmp
           cmake -S /tmp/freetype-VER-2-13-2 -B /tmp/ft-build -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$NDK_HOME/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-29 \
-            -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$SYSROOT/usr/local" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
             -DBUILD_SHARED_LIBS=ON -DFT_DISABLE_BZIP2=ON -DFT_DISABLE_PNG=ON \
-            -DFT_DISABLE_BROTLI=ON -DFT_DISABLE_HARFBUZZ=ON -DFT_DISABLE_ZLIB=ON \
-            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-          cmake --build /tmp/ft-build --parallel
-          cmake --install /tmp/ft-build
+            -DFT_DISABLE_BROTLI=ON -DFT_DISABLE_HARFBUZZ=ON -DFT_DISABLE_ZLIB=ON
+          cmake --build /tmp/ft-build --target install
 
       - name: Cross-build HarfBuzz (arm64-v8a)
         run: |
           export NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_SDK_ROOT/ndk/$(ls -1 "$ANDROID_SDK_ROOT/ndk" | sort -V | tail -1)}"
-          export SYSROOT="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          export INSTALL_DIR="$GITHUB_WORKSPACE/deps-android"
           curl -sL -o /tmp/harfbuzz.tar.gz https://codeload.github.com/harfbuzz/harfbuzz/tar.gz/refs/tags/8.3.0
           tar xzf /tmp/harfbuzz.tar.gz -C /tmp
           cmake -S /tmp/harfbuzz-8.3.0 -B /tmp/hb-build -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$NDK_HOME/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-29 \
-            -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$SYSROOT/usr/local" \
-            -DCMAKE_PREFIX_PATH="$SYSROOT/usr/local" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
+            -DCMAKE_PREFIX_PATH="$INSTALL_DIR" \
             -DBUILD_SHARED_LIBS=ON -DHB_HAVE_FREETYPE=ON -DHB_BUILD_UTILS=OFF \
             -DHB_BUILD_TESTS=OFF -DHB_BUILD_BENCHMARKS=OFF -DHB_BUILD_SUBSET=OFF \
-            -DHB_HAVE_GLIB=OFF -DHB_HAVE_GRAPHITE2=OFF -DHB_HAVE_ICU=OFF \
-            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-          cmake --build /tmp/hb-build --parallel
-          cmake --install /tmp/hb-build
+            -DHB_HAVE_GLIB=OFF -DHB_HAVE_GRAPHITE2=OFF -DHB_HAVE_ICU=OFF
+          cmake --build /tmp/hb-build --target install
 
-      # Wrap the NDK toolchain: its default find modes are ONLY (sysroot),
-      # which would hide the host Python dev files VGC needs for pybind11.
       - name: Create toolchain wrapper
         run: |
           export NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_SDK_ROOT/ndk/$(ls -1 "$ANDROID_SDK_ROOT/ndk" | sort -V | tail -1)}"
+          export INSTALL_DIR="$GITHUB_WORKSPACE/deps-android"
           cat > "$RUNNER_TEMP/vgc-android.toolchain.cmake" <<EOF
           include("$NDK_HOME/build/cmake/android.toolchain.cmake")
+          # Add our custom deps dir to the search path
+          list(APPEND CMAKE_FIND_ROOT_PATH "$INSTALL_DIR")
           set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE BOTH)
           set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY BOTH)
           set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)
           EOF
+
+      - name: Configure
+        env:
+          QT_ROOT_DIR: ${{ env.QT_ROOT_DIR }}
+          QT_HOST_PATH: ${{ env.QT_HOST_PATH }}
+        run: |
+          export NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_SDK_ROOT/ndk/$(ls -1 "$ANDROID_SDK_ROOT/ndk" | sort -V | tail -1)}"
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DVGC_QT_VERSION=6 \
+            -DQt6_DIR="$QT_ROOT_DIR/lib/cmake/Qt6" \
+            -DQT_HOST_PATH="$QT_HOST_PATH" \
+            -DPython_EXECUTABLE=/usr/bin/python3.11 \
+            -DCMAKE_TOOLCHAIN_FILE="$RUNNER_TEMP/vgc-android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-29 \
+            -DANDROID_STL=c++_shared \
+            -DHarfBuzz_ROOT="$GITHUB_WORKSPACE/deps-android" \
+            -DFreeType_ROOT="$GITHUB_WORKSPACE/deps-android"
 
       - name: Configure
         env:
