@@ -20,6 +20,7 @@
 #include <QGuiApplication>
 #include <QMessageBox>
 #include <QScreen>
+#include <QtGlobal>
 
 #include <vgc/app/filemanager.h>
 #include <vgc/app/logcategories.h>

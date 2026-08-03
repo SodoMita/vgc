@@ -16,6 +16,8 @@
 
 #include <vgc/app/mainwidget.h>
 
+#include <QtGlobal>
+
 #include <vgc/core/io.h>
 #include <vgc/core/paths.h>
 #include <vgc/ui/overlayarea.h>
