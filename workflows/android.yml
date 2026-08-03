@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 env:
   BUILD_TYPE: Release
-  QT_VERSION: 6.7.3
+  QT_VERSION: 6.5.3
   QT_MODULES: qtbase qtsvg qtdeclarative
 
 jobs:
