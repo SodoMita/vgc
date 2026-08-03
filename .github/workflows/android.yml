@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 env:
   BUILD_TYPE: Release
-  QT_VERSION: 6.4.3
+  QT_VERSION: 6.8.*
   QT_MODULES: qtbase qtsvg qtdeclarative
 
 jobs:
@@ -16,6 +16,9 @@ jobs:
         with:
           fetch-depth: 100
           submodules: 'recursive'
+      - name: Query aqt
+        run:
+          aqt list-qt all_os android
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -30,7 +33,7 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
-          host: linux
+          host: all_os
           target: android
           arch: android_arm64_v8a
           modules: ${{ env.QT_MODULES }}
