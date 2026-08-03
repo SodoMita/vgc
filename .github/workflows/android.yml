@@ -63,50 +63,78 @@ jobs:
       # FreeType and HarfBuzz must also be cross-built for Android (vgc links
       # them). Install them into the NDK sysroot so CMake's find modules
       # locate them without ever picking up host libraries.
-      - name: Cross-build FreeType (arm64-v8a)
+      - name: Cross-build FreeType + HarfBuzz (arm64-v8a)
         run: |
+          set -euo pipefail
           export NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_SDK_ROOT/ndk/$(ls -1 "$ANDROID_SDK_ROOT/ndk" | sort -V | tail -1)}"
-          # Install to a local workspace dir instead of the NDK sysroot
-          export INSTALL_DIR="$GITHUB_WORKSPACE/deps-android"
-          curl -sL -o /tmp/freetype.tar.gz https://codeload.github.com/freetype/freetype/tar.gz/refs/tags/VER-2-13-2
+          export DEPS_PREFIX="$RUNNER_TEMP/android-deps"
+          mkdir -p "$DEPS_PREFIX"
+          echo "DEPS_PREFIX=$DEPS_PREFIX" >> "$GITHUB_ENV"
+          echo "NDK_HOME=$NDK_HOME" >> "$GITHUB_ENV"
+
+          TC="$NDK_HOME/build/cmake/android.toolchain.cmake"
+          ABI=arm64-v8a
+          API=android-29
+
+          # --- FreeType ---
+          curl -sL -o /tmp/freetype.tar.gz \
+            https://codeload.github.com/freetype/freetype/tar.gz/refs/tags/VER-2-13-2
           tar xzf /tmp/freetype.tar.gz -C /tmp
           cmake -S /tmp/freetype-VER-2-13-2 -B /tmp/ft-build -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE="$NDK_HOME/build/cmake/android.toolchain.cmake" \
-            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-29 \
+            -DCMAKE_TOOLCHAIN_FILE="$TC" \
+            -DANDROID_ABI=$ABI -DANDROID_PLATFORM=$API \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
-            -DBUILD_SHARED_LIBS=ON -DFT_DISABLE_BZIP2=ON -DFT_DISABLE_PNG=ON \
-            -DFT_DISABLE_BROTLI=ON -DFT_DISABLE_HARFBUZZ=ON -DFT_DISABLE_ZLIB=ON
-          cmake --build /tmp/ft-build --target install
+            -DCMAKE_INSTALL_PREFIX="$DEPS_PREFIX" \
+            -DCMAKE_INSTALL_INCLUDEDIR=include \
+            -DCMAKE_INSTALL_LIBDIR=lib \
+            -DBUILD_SHARED_LIBS=ON \
+            -DFT_DISABLE_BZIP2=ON -DFT_DISABLE_PNG=ON \
+            -DFT_DISABLE_BROTLI=ON -DFT_DISABLE_HARFBUZZ=ON -DFT_DISABLE_ZLIB=ON \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake --build /tmp/ft-build --parallel
+          cmake --install /tmp/ft-build
 
-      - name: Cross-build HarfBuzz (arm64-v8a)
-        run: |
-          export NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_SDK_ROOT/ndk/$(ls -1 "$ANDROID_SDK_ROOT/ndk" | sort -V | tail -1)}"
-          export INSTALL_DIR="$GITHUB_WORKSPACE/deps-android"
-          curl -sL -o /tmp/harfbuzz.tar.gz https://codeload.github.com/harfbuzz/harfbuzz/tar.gz/refs/tags/8.3.0
+          # --- HarfBuzz ---
+          # CRITICAL: set CMAKE_INSTALL_INCLUDEDIR *before* configure.
+          # HB 8.3 expands $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/harfbuzz>
+          # prior to include(GNUInstallDirs); empty → broken path "/harfbuzz".
+          curl -sL -o /tmp/harfbuzz.tar.gz \
+            https://codeload.github.com/harfbuzz/harfbuzz/tar.gz/refs/tags/8.3.0
           tar xzf /tmp/harfbuzz.tar.gz -C /tmp
           cmake -S /tmp/harfbuzz-8.3.0 -B /tmp/hb-build -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE="$NDK_HOME/build/cmake/android.toolchain.cmake" \
-            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-29 \
+            -DCMAKE_TOOLCHAIN_FILE="$TC" \
+            -DANDROID_ABI=$ABI -DANDROID_PLATFORM=$API \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
-            -DCMAKE_PREFIX_PATH="$INSTALL_DIR" \
-            -DBUILD_SHARED_LIBS=ON -DHB_HAVE_FREETYPE=ON -DHB_BUILD_UTILS=OFF \
-            -DHB_BUILD_TESTS=OFF -DHB_BUILD_BENCHMARKS=OFF -DHB_BUILD_SUBSET=OFF \
-            -DHB_HAVE_GLIB=OFF -DHB_HAVE_GRAPHITE2=OFF -DHB_HAVE_ICU=OFF
-          cmake --build /tmp/hb-build --target install
+            -DCMAKE_INSTALL_PREFIX="$DEPS_PREFIX" \
+            -DCMAKE_INSTALL_INCLUDEDIR=include \
+            -DCMAKE_INSTALL_LIBDIR=lib \
+            -DCMAKE_PREFIX_PATH="$DEPS_PREFIX" \
+            -DBUILD_SHARED_LIBS=ON \
+            -DHB_HAVE_FREETYPE=ON \
+            -DHB_BUILD_UTILS=OFF -DHB_BUILD_TESTS=OFF \
+            -DHB_BUILD_BENCHMARKS=OFF -DHB_BUILD_SUBSET=OFF \
+            -DHB_HAVE_GLIB=OFF -DHB_HAVE_GRAPHITE2=OFF -DHB_HAVE_ICU=OFF \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake --build /tmp/hb-build --parallel
+          cmake --install /tmp/hb-build
+
+          # Sanity check: config must NOT contain the bare /harfbuzz path
+          echo "== installed tree =="
+          find "$DEPS_PREFIX" -type f | sort
+          echo "== harfbuzz cmake config (include lines) =="
+          grep -n 'INCLUDE\|harfbuzz' \
+            "$DEPS_PREFIX"/lib/cmake/harfbuzz/* || true
 
       - name: Create toolchain wrapper
         run: |
-          export NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_SDK_ROOT/ndk/$(ls -1 "$ANDROID_SDK_ROOT/ndk" | sort -V | tail -1)}"
-          export INSTALL_DIR="$GITHUB_WORKSPACE/deps-android"
           cat > "$RUNNER_TEMP/vgc-android.toolchain.cmake" <<EOF
           include("$NDK_HOME/build/cmake/android.toolchain.cmake")
-          # Add our custom deps dir to the search path
-          list(APPEND CMAKE_FIND_ROOT_PATH "$INSTALL_DIR")
+          # Host Python headers/libs for pybind11; deps prefix for FT/HB.
           set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE BOTH)
           set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY BOTH)
           set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)
+          list(APPEND CMAKE_FIND_ROOT_PATH "$DEPS_PREFIX")
+          list(APPEND CMAKE_PREFIX_PATH "$DEPS_PREFIX")
           EOF
 
       - name: Configure
@@ -114,28 +142,6 @@ jobs:
           QT_ROOT_DIR: ${{ env.QT_ROOT_DIR }}
           QT_HOST_PATH: ${{ env.QT_HOST_PATH }}
         run: |
-          export NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_SDK_ROOT/ndk/$(ls -1 "$ANDROID_SDK_ROOT/ndk" | sort -V | tail -1)}"
-          cmake -S . -B build \
-            -G Ninja \
-            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-            -DVGC_QT_VERSION=6 \
-            -DQt6_DIR="$QT_ROOT_DIR/lib/cmake/Qt6" \
-            -DQT_HOST_PATH="$QT_HOST_PATH" \
-            -DPython_EXECUTABLE=/usr/bin/python3.11 \
-            -DCMAKE_TOOLCHAIN_FILE="$RUNNER_TEMP/vgc-android.toolchain.cmake" \
-            -DANDROID_ABI=arm64-v8a \
-            -DANDROID_PLATFORM=android-29 \
-            -DANDROID_STL=c++_shared \
-            -DHarfBuzz_ROOT="$GITHUB_WORKSPACE/deps-android" \
-            -DFreeType_ROOT="$GITHUB_WORKSPACE/deps-android"
-
-      - name: Configure
-        env:
-          QT_ROOT_DIR: ${{ env.QT_ROOT_DIR }}
-          QT_HOST_PATH: ${{ env.QT_HOST_PATH }}
-        run: |
-          export NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_SDK_ROOT/ndk/$(ls -1 "$ANDROID_SDK_ROOT/ndk" | sort -V | tail -1)}"
-          export SYSROOT="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
           cmake -S . -B build \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
@@ -143,15 +149,16 @@ jobs:
             -DVGC_QT_VERSION=6 \
             -DQt6_DIR="$QT_ROOT_DIR/lib/cmake/Qt6" \
             -DQT_HOST_PATH="$QT_HOST_PATH" \
-            -DPython_EXECUTABLE=/usr/bin/python3 \
+            -DPython_EXECUTABLE=/usr/bin/python3.11 \
             -DPython_ROOT_DIR=/usr \
             -DCMAKE_TOOLCHAIN_FILE="$RUNNER_TEMP/vgc-android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a \
             -DANDROID_PLATFORM=android-29 \
             -DANDROID_STL=c++_shared \
             -DANDROID_NDK="$NDK_HOME" \
-            -DANDROID_SDK_ROOT="$ANDROID_SDK_ROOT" \
-            -DHARFBUZZ_DIR="$SYSROOT/usr/local"
+            -DCMAKE_PREFIX_PATH="$DEPS_PREFIX" \
+            -Dharfbuzz_DIR="$DEPS_PREFIX/lib/cmake/harfbuzz"
+          # Note: harfbuzz_DIR (package_DIR), NOT HARFBUZZ_DIR
 
       - name: Build
         run: cmake --build build --parallel $(nproc)
