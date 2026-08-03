@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 env:
   BUILD_TYPE: Release
-  QT_VERSION: 6.7.3
+  QT_VERSION: 6.8.*
   # Qt6 note: there is no "qtopenGL"/"qtopenGLwidgets" module — OpenGL and
   # OpenGLWidgets are part of qtbase. qtdeclarative is not used by this app.
   QT_MODULES: ""
