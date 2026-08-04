@@ -20,8 +20,9 @@ NDK_HOME="$ANDROID_SDK_ROOT/ndk/$NDK_VERSION"
 SYSROOT="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
 echo "==> [1/8] Java"
-JAVA_VERSION_OUTPUT="$(java -version 2>&1 | head -n1)"
-JAVA_MAJOR="$(printf '%s\n' "$JAVA_VERSION_OUTPUT" | sed -E 's/.*version "([0-9]+).*/\1/')"
+JAVA_VERSION_OUTPUT="$(java -version 2>&1)"
+JAVA_VERSION_LINE="$(printf '%s\n' "$JAVA_VERSION_OUTPUT" | grep -E 'version "[0-9]+' | head -n1)"
+JAVA_MAJOR="$(printf '%s\n' "$JAVA_VERSION_LINE" | sed -E 's/.*version "([0-9]+).*/\1/')"
 if ! printf '%s' "$JAVA_MAJOR" | grep -Eq '^[0-9]+$' || [ "$JAVA_MAJOR" -lt 17 ]; then
     echo "Please install a JDK 17 or newer (found: $JAVA_VERSION_OUTPUT)" >&2; exit 1
 fi
