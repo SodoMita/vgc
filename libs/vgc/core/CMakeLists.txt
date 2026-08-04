@@ -1,87 +1,98 @@
+set(VGC_CORE_THIRD_DEPENDENCIES
+    ${VGC_FMT}
+    range-v3
+)
+set(VGC_CORE_CPP_HEADER_FILES
+    algorithms.h
+    animtime.h
+    api.h
+    arithmetic.h
+    array.h
+    assert.h
+    boolguard.h
+    color.h
+    colors.h
+    datetime.h
+    defs.h
+    dll.h
+    enum.h
+    exceptions.h
+    flags.h
+    format.h
+    history.h
+    id.h
+    innercore.h
+    io.h
+    logcategories.h
+    logging.h
+    object.h
+    objecttype.h
+    objectarray.h
+    parse.h
+    paths.h
+    performancelog.h
+    preprocessor.h
+    profile.h
+    random.h
+    ranges.h
+    sharedconst.h
+    span.h
+    stopwatch.h
+    stringid.h
+    stringutil.h
+    templateutil.h
+    typeid.h
+    xml.h
+
+    detail/parsebits.h
+    detail/signal.h
+)
+set(VGC_CORE_CPP_SOURCE_FILES
+    algorithms.cpp
+    animtime.cpp
+    arithmetic.cpp
+    boolguard.cpp
+    color.cpp
+    datetime.cpp
+    enum.cpp
+    exceptions.cpp
+    format.cpp
+    history.cpp
+    id.cpp
+    io.cpp
+    logcategories.cpp
+    logging.cpp
+    object.cpp
+    parse.cpp
+    paths.cpp
+    performancelog.cpp
+    profile.cpp
+    random.cpp
+    stopwatch.cpp
+    stringid.cpp
+    stringutil.cpp
+    typeid.cpp
+    xml.cpp
+
+    detail/signal.cpp
+)
+if(NOT ANDROID)
+    list(APPEND VGC_CORE_THIRD_DEPENDENCIES Python::Python pybind11::headers)
+    list(APPEND VGC_CORE_CPP_HEADER_FILES python.h)
+    list(APPEND VGC_CORE_CPP_SOURCE_FILES python.cpp)
+endif()
+
 vgc_add_library(core
     THIRD_DEPENDENCIES
-        Python::Python
-        pybind11::headers
-        ${VGC_FMT}
-        range-v3
+        ${VGC_CORE_THIRD_DEPENDENCIES}
 
     VGC_DEPENDENCIES
 
     CPP_HEADER_FILES
-        algorithms.h
-        animtime.h
-        api.h
-        arithmetic.h
-        array.h
-        assert.h
-        boolguard.h
-        color.h
-        colors.h
-        datetime.h
-        defs.h
-        dll.h
-        enum.h
-        exceptions.h
-        flags.h
-        format.h
-        history.h
-        id.h
-        innercore.h
-        io.h
-        logcategories.h
-        logging.h
-        object.h
-        objecttype.h
-        objectarray.h
-        parse.h
-        paths.h
-        performancelog.h
-        preprocessor.h
-        profile.h
-        python.h
-        random.h
-        ranges.h
-        sharedconst.h
-        span.h
-        stopwatch.h
-        stringid.h
-        stringutil.h
-        templateutil.h
-        typeid.h
-        xml.h
-
-        detail/parsebits.h
-        detail/signal.h
+        ${VGC_CORE_CPP_HEADER_FILES}
 
     CPP_SOURCE_FILES
-        algorithms.cpp
-        animtime.cpp
-        arithmetic.cpp
-        boolguard.cpp
-        color.cpp
-        datetime.cpp
-        enum.cpp
-        exceptions.cpp
-        format.cpp
-        history.cpp
-        id.cpp
-        io.cpp
-        logcategories.cpp
-        logging.cpp
-        object.cpp
-        parse.cpp
-        paths.cpp
-        performancelog.cpp
-        profile.cpp
-        python.cpp
-        random.cpp
-        stopwatch.cpp
-        stringid.cpp
-        stringutil.cpp
-        typeid.cpp
-        xml.cpp
-
-        detail/signal.cpp
+        ${VGC_CORE_CPP_SOURCE_FILES}
 
     NATVIS_FILES
         tools/vgccore.natvis

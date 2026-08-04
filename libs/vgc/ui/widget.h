@@ -20,7 +20,6 @@
 #include <algorithm> // std::find
 
 #include <QOpenGLBuffer>
-#include <QOpenGLFunctions_3_2_Core>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLVertexArrayObject>
 

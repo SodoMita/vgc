@@ -25,8 +25,53 @@
 #include <QOpenGLBuffer>
 #include <QOpenGLContext>
 #include <QOpenGLFunctions>
-#include <QOpenGLFunctions_3_2_Core>
-#include <QOpenGLFunctions_3_3_Core>
+#if defined(Q_OS_ANDROID)
+#    include <QOpenGLExtraFunctions>
+#    include <GLES3/gl32.h>
+
+// Some desktop OpenGL tokens referenced by VGC's generic pixel-format/state
+// tables are not declared by Android GLES headers. They remain unused on the
+// current Android path, but defining them keeps the shared code buildable.
+#ifndef GL_R16
+#    define GL_R16 0x822A
+#endif
+#ifndef GL_R16_SNORM
+#    define GL_R16_SNORM 0x8F98
+#endif
+#ifndef GL_RG16
+#    define GL_RG16 0x822C
+#endif
+#ifndef GL_RG16_SNORM
+#    define GL_RG16_SNORM 0x8F99
+#endif
+#ifndef GL_UNSIGNED_INT_10_10_10_2
+#    define GL_UNSIGNED_INT_10_10_10_2 0x8036
+#endif
+#ifndef GL_RGBA16
+#    define GL_RGBA16 0x805B
+#endif
+#ifndef GL_SRC1_COLOR
+#    define GL_SRC1_COLOR 0x88F9
+#endif
+#ifndef GL_ONE_MINUS_SRC1_COLOR
+#    define GL_ONE_MINUS_SRC1_COLOR 0x88FA
+#endif
+#ifndef GL_SRC1_ALPHA
+#    define GL_SRC1_ALPHA 0x8589
+#endif
+#ifndef GL_ONE_MINUS_SRC1_ALPHA
+#    define GL_ONE_MINUS_SRC1_ALPHA 0x88FB
+#endif
+#ifndef GL_FILL
+#    define GL_FILL 0x1B02
+#endif
+#ifndef GL_LINE
+#    define GL_LINE 0x1B01
+#endif
+#else
+#    include <QOpenGLFunctions_3_2_Core>
+#    include <QOpenGLFunctions_3_3_Core>
+#endif
 #include <QOpenGLShaderProgram>
 #include <QOpenGLVertexArrayObject>
 #include <QPointF>
@@ -48,8 +93,13 @@ VGC_DECLARE_OBJECT(QglEngine);
 using namespace ::vgc::graphics;
 
 inline constexpr Int requiredOpenGLVersionMajor = 3;
+#if defined(Q_OS_ANDROID)
+inline constexpr Int requiredOpenGLVersionMinor = 0;
+using OpenGLFunctions = QOpenGLExtraFunctions;
+#else
 inline constexpr Int requiredOpenGLVersionMinor = 3;
 using OpenGLFunctions = QOpenGLFunctions_3_3_Core;
+#endif
 inline constexpr QPair<int, int>
     requiredOpenGLVersionQPair(requiredOpenGLVersionMajor, requiredOpenGLVersionMinor);
 

@@ -150,7 +150,13 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/tools")
 #
 message(STATUS "") # newline
 message(STATUS "[Python]")
-find_package(Python 3.6 COMPONENTS Interpreter Development REQUIRED)
+if(ANDROID)
+    # Android builds use host Python only to run build-time scripts. Do not
+    # find/link host Python Development libraries into Android targets.
+    find_package(Python 3.6 COMPONENTS Interpreter REQUIRED)
+else()
+    find_package(Python 3.6 COMPONENTS Interpreter Development REQUIRED)
+endif()
 execute_process(COMMAND ${Python_EXECUTABLE} -c "import sys; print(sys.prefix, end='')" OUTPUT_VARIABLE VGC_PYTHON_PREFIX)
 execute_process(COMMAND ${Python_EXECUTABLE} -c "import sys; print(sys.exec_prefix, end='')" OUTPUT_VARIABLE VGC_PYTHON_EXEC_PREFIX)
 if(VGC_PYTHON_PREFIX STREQUAL VGC_PYTHON_EXEC_PREFIX)
@@ -270,15 +276,17 @@ set(VGC_QT_OPENGLWIDGETS Qt::OpenGLWidgets)
 message(STATUS "") # newline
 
 # pybind11
-message(STATUS "[pybind11]")
-set(pybind11_DIR ${CMAKE_CURRENT_LIST_DIR}/third/pybind11 CACHE FILEPATH "Path to the root of the pybind11 distribution")
-add_subdirectory(${pybind11_DIR})
-if(${pybind11_FOUND})
-    message(STATUS "Found pybind11: ${pybind11_DIR}")
-else()
-    message(SEND_ERROR "Can't find pybind11")
+if(NOT ANDROID)
+    message(STATUS "[pybind11]")
+    set(pybind11_DIR ${CMAKE_CURRENT_LIST_DIR}/third/pybind11 CACHE FILEPATH "Path to the root of the pybind11 distribution")
+    add_subdirectory(${pybind11_DIR})
+    if(${pybind11_FOUND})
+        message(STATUS "Found pybind11: ${pybind11_DIR}")
+    else()
+        message(SEND_ERROR "Can't find pybind11")
+    endif()
+    message(STATUS "") # newline
 endif()
-message(STATUS "") # newline
 
 # {fmt}
 #

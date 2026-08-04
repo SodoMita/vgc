@@ -20,8 +20,10 @@ NDK_HOME="$ANDROID_SDK_ROOT/ndk/$NDK_VERSION"
 SYSROOT="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
 echo "==> [1/8] Java"
-if ! java -version 2>&1 | grep -q 'version "17'; then
-    echo "Please install a JDK 17 (e.g. sudo apt install openjdk-17-jdk)" >&2; exit 1
+JAVA_VERSION_OUTPUT="$(java -version 2>&1 | head -n1)"
+JAVA_MAJOR="$(printf '%s\n' "$JAVA_VERSION_OUTPUT" | sed -E 's/.*version "([0-9]+).*/\1/')"
+if ! printf '%s' "$JAVA_MAJOR" | grep -Eq '^[0-9]+$' || [ "$JAVA_MAJOR" -lt 17 ]; then
+    echo "Please install a JDK 17 or newer (found: $JAVA_VERSION_OUTPUT)" >&2; exit 1
 fi
 command -v javac >/dev/null || { echo "javac not found; install a full JDK" >&2; exit 1; }
 
@@ -40,14 +42,18 @@ yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/n
 echo "==> [3/8] Qt $QT_VERSION (host + android)"
 python3 -m pip install --user aqtinstall || true
 export PATH="$HOME/.local/bin:$PATH"
-aqt install-qt linux desktop "$QT_VERSION" -O "$HOME/Qt" --modules qtbase qtsvg || true
 QT_HOST_PATH="$HOME/Qt/$QT_VERSION/gcc_64"
 export QT_ROOT_DIR="$HOME/Qt/$QT_VERSION/android_arm64_v8a"
-if [ ! -d "$QT_ROOT_DIR" ]; then
-    aqt install-qt linux android "$QT_VERSION" -O "$HOME/Qt" \
-        --arch android_arm64_v8a --modules qtbase qtsvg
+if [ ! -d "$QT_HOST_PATH" ]; then
+    aqt install-qt linux desktop "$QT_VERSION" linux_gcc_64 -O "$HOME/Qt"
 fi
-export PATH="$QT_ROOT_DIR/bin:$PATH"
+if [ ! -d "$QT_ROOT_DIR" ]; then
+    aqt install-qt linux android "$QT_VERSION" android_arm64_v8a -O "$HOME/Qt"
+fi
+export PATH="$QT_HOST_PATH/bin:$QT_ROOT_DIR/bin:$PATH"
+# Keep Gradle within small CI/container memory budgets and avoid persistent daemons.
+export GRADLE_OPTS="${GRADLE_OPTS:--Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx768m -Dfile.encoding=UTF-8}"
+export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:--Dfile.encoding=UTF-8}"
 
 echo "==> [4/8] Cross-build FreeType + HarfBuzz (static, into NDK sysroot)"
 curl -sL -o /tmp/freetype.tar.gz https://codeload.github.com/freetype/freetype/tar.gz/refs/tags/VER-2-13-2
@@ -110,12 +116,9 @@ cmake -S . -B "$OUT_DIR" -G Ninja \
 echo "==> [7/8] Build"
 cmake --build "$OUT_DIR" --parallel "$(nproc)"
 
-echo "==> [8/8] Deploy APK"
-SETTINGS=$(find "$OUT_DIR" -name 'android-*-deployment-settings.json' | head -n1)
-[ -n "$SETTINGS" ] || { echo "No android-*-deployment-settings.json found!" >&2; exit 1; }
-mkdir -p "$OUT_DIR/android"
-androiddeployqt --input "$SETTINGS" --output "$OUT_DIR/android" \
-    --android-platform "$ANDROID_PLATFORM" --gradle
+echo "==> [8/8] Locate APK"
+APK=$(find "$OUT_DIR" -name '*.apk' -type f | head -n1)
+[ -n "$APK" ] || { echo "No APK found under $OUT_DIR after build!" >&2; exit 1; }
 
 echo ""
-echo "APK: $(find "$OUT_DIR/android" -name '*.apk' | head -n1)"
+echo "APK: $APK"

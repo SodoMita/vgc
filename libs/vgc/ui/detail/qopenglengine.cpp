@@ -1105,15 +1105,21 @@ void QglEngine::initContext_() {
         ctx_->hasExtension("EXT_texture_filter_anisotropic");
 
     // Get API
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+#if defined(Q_OS_ANDROID)
+    api_ = ctx_->extraFunctions();
+#elif QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     api_ = ctx_->versionFunctions<OpenGLFunctions>();
 #else
     api_ = QOpenGLVersionFunctionsFactory::get<OpenGLFunctions>(ctx_);
 #endif
     //
     VGC_CORE_ASSERT(api_ != nullptr);
+#if defined(Q_OS_ANDROID)
+    api_->initializeOpenGLFunctions();
+#else
     [[maybe_unused]] bool ok = api_->initializeOpenGLFunctions();
     VGC_CORE_ASSERT(ok);
+#endif
 
     if (hasAnisotropicFilteringSupport_) {
         api_->glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &maxTextureMaxAnisotropy);
@@ -1287,6 +1293,9 @@ void QglEngine::initImage_(
     api_->glActiveTexture(GL_TEXTURE0);
 
     if (image->rank() == ImageRank::_1D) {
+#if defined(Q_OS_ANDROID)
+        throw core::LogicError("QglEngine: 1D textures are not supported on Android/OpenGL ES.");
+#else
         VGC_CORE_ASSERT(!isMultisampled);
 
         if (isArray) {
@@ -1326,6 +1335,7 @@ void QglEngine::initImage_(
                                        : nullptr); // XXX check size
             }
         }
+#endif
     }
     else {
         VGC_CORE_ASSERT(image->rank() == ImageRank::_2D);
@@ -1333,6 +1343,9 @@ void QglEngine::initImage_(
 
         if (isArray) {
             if (isMultisampled) {
+#if defined(Q_OS_ANDROID)
+                throw core::LogicError("QglEngine: multisampled texture arrays are not supported on Android/OpenGL ES.");
+#else
                 target = GL_TEXTURE_2D_MULTISAMPLE_ARRAY;
                 api_->glBindTexture(target, object);
                 api_->glTexParameteri(target, GL_TEXTURE_BASE_LEVEL, 0);
@@ -1345,6 +1358,7 @@ void QglEngine::initImage_(
                     image->height(),
                     image->numLayers(),
                     GL_TRUE);
+#endif
             }
             else {
                 target = GL_TEXTURE_2D_ARRAY;
@@ -1369,6 +1383,9 @@ void QglEngine::initImage_(
         }
         else {
             if (isMultisampled) {
+#if defined(Q_OS_ANDROID)
+                throw core::LogicError("QglEngine: multisampled textures are not supported on Android/OpenGL ES.");
+#else
                 target = GL_TEXTURE_2D_MULTISAMPLE;
                 api_->glBindTexture(target, object);
                 api_->glTexParameteri(target, GL_TEXTURE_BASE_LEVEL, 0);
@@ -1380,6 +1397,7 @@ void QglEngine::initImage_(
                     image->width(),
                     image->height(),
                     GL_TRUE);
+#endif
             }
             else {
                 target = GL_TEXTURE_2D;
@@ -1416,6 +1434,9 @@ void QglEngine::initImageView_(ImageView* aView) {
     QglImageView* view = static_cast<QglImageView*>(aView);
     QglBuffer* buffer = view->viewedBuffer().get_static_cast<QglBuffer>();
     if (buffer) {
+#if defined(Q_OS_ANDROID)
+        throw core::LogicError("QglEngine: buffer texture views are not supported on Android/OpenGL ES.");
+#else
         GLuint object = 0;
         api_->glGenTextures(1, &object);
         view->bufferTextureObject_ = object;
@@ -1424,6 +1445,7 @@ void QglEngine::initImageView_(ImageView* aView) {
             GL_TEXTURE_BUFFER, view->glFormat().internalFormat, buffer->object_);
         api_->glBindBuffer(GL_TEXTURE_BUFFER, 0);
         view->target_ = GL_TEXTURE_BUFFER;
+#endif
     }
     else {
         QglImage* image = view->viewedImage().get_static_cast<QglImage>();
@@ -1445,7 +1467,11 @@ void QglEngine::initSamplerState_(SamplerState* aState) {
         object, GL_TEXTURE_COMPARE_FUNC, state->comparisonFunctionGL_);
     api_->glSamplerParameterf(
         object, GL_TEXTURE_MAX_ANISOTROPY_EXT, state->maxAnisotropyGL_);
+#if !defined(Q_OS_ANDROID)
     api_->glSamplerParameterf(object, GL_TEXTURE_LOD_BIAS, state->mipLODBias());
+#else
+    VGC_UNUSED(state);
+#endif
     api_->glSamplerParameterf(object, GL_TEXTURE_MIN_LOD, state->minLOD());
     api_->glSamplerParameterf(object, GL_TEXTURE_MAX_LOD, state->maxLOD());
 }
@@ -1487,7 +1513,11 @@ void QglEngine::setSwapChain_(const SwapChainPtr& aSwapChain) {
     api_->glDisable(GL_DEPTH_TEST);
     api_->glDisable(GL_STENCIL_TEST);
 
+#if defined(Q_OS_ANDROID)
+    api_->glDisable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
+#else
     api_->glDisable(GL_PRIMITIVE_RESTART);
+#endif
     isPrimitiveRestartEnabled_ = false;
     lastIndexFormat_ = 0;
 }
@@ -1605,9 +1635,13 @@ void QglEngine::setRasterizerState_(const RasterizerStatePtr& aState) {
         bool isMultisamplingEnabled = newState->isMultisamplingEnabled();
         bool isLineAntialiasingEnabled = newState->isLineAntialiasingEnabled();
 
+#if !defined(Q_OS_ANDROID)
         if (!oldState || fillModeGL != oldState->fillModeGL_) {
             api_->glPolygonMode(GL_FRONT_AND_BACK, fillModeGL);
         }
+#else
+        VGC_UNUSED(fillModeGL);
+#endif
 
         if (cullModeGL == 0) {
             if (!oldState || oldState->cullModeGL_ != 0) {
@@ -1628,6 +1662,7 @@ void QglEngine::setRasterizerState_(const RasterizerStatePtr& aState) {
             api_->glFrontFace(isFrontCounterClockwise ? GL_CCW : GL_CW);
         }
 
+#if !defined(Q_OS_ANDROID)
         if (!oldState || isDepthClippingEnabled != oldState->isDepthClippingEnabled()) {
             setEnabled_(GL_DEPTH_CLAMP, isDepthClippingEnabled);
         }
@@ -1640,6 +1675,11 @@ void QglEngine::setRasterizerState_(const RasterizerStatePtr& aState) {
             || isLineAntialiasingEnabled != oldState->isLineAntialiasingEnabled()) {
             setEnabled_(GL_LINE_SMOOTH, isLineAntialiasingEnabled);
         }
+#else
+        VGC_UNUSED(isDepthClippingEnabled);
+        VGC_UNUSED(isMultisamplingEnabled);
+        VGC_UNUSED(isLineAntialiasingEnabled);
+#endif
 
         boundRasterizerState_ = aState;
     }
@@ -1813,6 +1853,7 @@ void QglEngine::draw_(
             indexSize = 2;
         }
 
+#if !defined(Q_OS_ANDROID)
         if (indexFormat != lastIndexFormat_) {
             switch (indexFormat) {
             case GL_UNSIGNED_SHORT:
@@ -1830,6 +1871,12 @@ void QglEngine::draw_(
             api_->glEnable(GL_PRIMITIVE_RESTART);
             isPrimitiveRestartEnabled_ = true;
         }
+#else
+        if (!isPrimitiveRestartEnabled_) {
+            api_->glEnable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
+            isPrimitiveRestartEnabled_ = true;
+        }
+#endif
 
         const GLvoid* indicesOffset = reinterpret_cast<GLvoid*>(startIndex * indexSize);
         api_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer->object());
@@ -1847,7 +1894,11 @@ void QglEngine::draw_(
         GLint first = core::int_cast<GLint>(startIndex) + baseVtx;
 
         if (isPrimitiveRestartEnabled_) {
+#if defined(Q_OS_ANDROID)
+            api_->glDisable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
+#else
             api_->glDisable(GL_PRIMITIVE_RESTART);
+#endif
             isPrimitiveRestartEnabled_ = false;
         }
 
@@ -1978,7 +2029,12 @@ bool QglEngine::loadBuffer_(Buffer* buffer_, const void* data, Int dataSize) {
     }
 
     if (data && !skipCopy) {
+#if defined(Q_OS_ANDROID)
+        void* mapped = api_->glMapBufferRange(
+            GL_COPY_WRITE_BUFFER, 0, dataSize, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_RANGE_BIT);
+#else
         void* mapped = api_->glMapBuffer(GL_COPY_WRITE_BUFFER, GL_WRITE_ONLY);
+#endif
         if (mapped) {
             std::memcpy(mapped, data, dataSize);
             api_->glUnmapBuffer(GL_COPY_WRITE_BUFFER);
