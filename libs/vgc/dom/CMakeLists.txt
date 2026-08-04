@@ -45,5 +45,7 @@ vgc_add_library(dom
     COMPILE_DEFINITIONS
 )
 
-add_subdirectory(wraps)
-add_subdirectory(tests)
+if(NOT ANDROID)
+    add_subdirectory(wraps)
+    add_subdirectory(tests)
+endif()

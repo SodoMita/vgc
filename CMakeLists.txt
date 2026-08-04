@@ -227,9 +227,9 @@ endif()
 message(STATUS "") # newline
 
 # Find, configure, and include Qt. The recommended way to make sure that the
-# desired version of Qt is found is to pass -DQt5_DIR to cmake, e.g.:
+# desired version of Qt is found is to pass -DQt6_DIR to cmake, e.g.:
 #
-#   cmake .. -DQt5_DIR="C:\Qt\5.15.2\msvc2019_64\lib\cmake\Qt5"
+#   cmake .. -DQt6_DIR="C:\Qt\6.7.3\msvc2019_64\lib\cmake\Qt6"
 #
 # Note that we add -DQT_NO_KEYWORDS as a private compile definition to all
 # VGC libs, which forces them to use Q_EMIT/Q_SIGNALS/Q_SLOTS, but doesn't
@@ -239,8 +239,8 @@ message(STATUS "") # newline
 # for example:
 #
 #  vgc/CMakeLists.txt:
-#    find_package(Qt5Core COMPONENTS Private)
-#    set(VGC_QT_CORE_PRIVATE Qt5::CorePrivate)
+#    find_package(Qt6Core COMPONENTS Private)
+#    set(VGC_QT_CORE_PRIVATE Qt6::CorePrivate)
 #
 #  libs/vgc/graphics/CMakeLists.txt:
 #    vgc_add_library(graphics
@@ -251,46 +251,22 @@ message(STATUS "") # newline
 #  libs/vgc/graphics/text.cpp:
 #    #include <QtCore/private/qunicodetools_p.h>
 #
-set(VGC_QT_VERSION "" CACHE STRING "Which Qt major version to use (latest by default)")
+set(VGC_QT_VERSION "6" CACHE STRING "Which Qt major version to use (6 by default)")
 message(STATUS "[Qt]")
-if(NOT VGC_QT_VERSION)
-    find_package(Qt6 COMPONENTS Core Gui Widgets Svg OpenGL OpenGLWidgets QUIET)
-    if(NOT Qt6_FOUND OR Qt6_DIR EQUAL "")
-        find_package(Qt5 COMPONENTS Core Gui Widgets Svg REQUIRED)
-    endif()
-elseif(VGC_QT_VERSION EQUAL 6)
-    find_package(Qt6 COMPONENTS Core Gui Widgets Svg OpenGL OpenGLWidgets REQUIRED)
-elseif(VGC_QT_VERSION EQUAL 5)
-    find_package(Qt5 COMPONENTS Core Gui Widgets Svg REQUIRED)
-else()
-    message(FATAL_ERROR "Given VGC_QT_VERSION (${VGC_QT_VERSION}) is not supported.")
+find_package(Qt6 COMPONENTS Core Gui Widgets Svg OpenGL OpenGLWidgets REQUIRED)
+if(NOT Qt6_FOUND)
+    message(FATAL_ERROR "Qt6 not found")
 endif()
-
-if(Qt5_FOUND)
-    list(APPEND VGC_PRIVATE_COMPILE_DEFINITIONS "QT_NO_KEYWORDS")
-    get_filename_component(VGC_QT_ROOT ${Qt5_DIR}/../../.. ABSOLUTE)
-    message(STATUS "Found Qt5: ${VGC_QT_ROOT}")
-    message(STATUS "Version: ${Qt5_VERSION}")
-    set(VGC_QT_CORE Qt5::Core)
-    set(VGC_QT_GUI Qt5::Gui)
-    set(VGC_QT_WIDGETS Qt5::Widgets)
-    set(VGC_QT_SVG Qt5::Svg)
-    set(VGC_QT_OPENGL "")
-    set(VGC_QT_OPENGLWIDGETS "")
-elseif(Qt6_FOUND)
-    list(APPEND VGC_PRIVATE_COMPILE_DEFINITIONS "QT_NO_KEYWORDS")
-    get_filename_component(VGC_QT_ROOT ${Qt6_DIR}/../../.. ABSOLUTE)
-    message(STATUS "Found Qt6: ${VGC_QT_ROOT}")
-    message(STATUS "Version: ${Qt6_VERSION}")
-    set(VGC_QT_CORE Qt::Core)
-    set(VGC_QT_GUI Qt::Gui)
-    set(VGC_QT_WIDGETS Qt::Widgets)
-    set(VGC_QT_SVG Qt::Svg)
-    set(VGC_QT_OPENGL Qt::OpenGL)
-    set(VGC_QT_OPENGLWIDGETS Qt::OpenGLWidgets)
-else()
-    message(FATAL_ERROR "Qt not found")
-endif()
+list(APPEND VGC_PRIVATE_COMPILE_DEFINITIONS "QT_NO_KEYWORDS")
+get_filename_component(VGC_QT_ROOT ${Qt6_DIR}/../../.. ABSOLUTE)
+message(STATUS "Found Qt6: ${VGC_QT_ROOT}")
+message(STATUS "Version: ${Qt6_VERSION}")
+set(VGC_QT_CORE Qt::Core)
+set(VGC_QT_GUI Qt::Gui)
+set(VGC_QT_WIDGETS Qt::Widgets)
+set(VGC_QT_SVG Qt::Svg)
+set(VGC_QT_OPENGL Qt::OpenGL)
+set(VGC_QT_OPENGLWIDGETS Qt::OpenGLWidgets)
 message(STATUS "") # newline
 
 # pybind11
@@ -687,6 +663,18 @@ elseif(APPLE)
             "$<CONFIG>"
             "${VGC_QT_ROOT}"
         USES_TERMINAL # prints output to terminal in real-time
+    )
+elseif(ANDROID)
+    add_custom_target(deploy
+        VERBATIM
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMAND ${Python_EXECUTABLE}
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/android/deploy.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}"
+            "${CMAKE_CURRENT_BINARY_DIR}"
+            "$<CONFIG>"
+            "${VGC_QT_ROOT}"
+        USES_TERMINAL
     )
 else()
     add_custom_target(deploy

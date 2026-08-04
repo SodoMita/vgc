@@ -1,2 +1,4 @@
 add_subdirectory(illustration)
-add_subdirectory(uitest)
+if(NOT ANDROID)
+    add_subdirectory(uitest)
+endif()

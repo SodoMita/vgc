@@ -91,5 +91,7 @@ vgc_add_library(graphics
         shaders/opengl/simple_textured_debug.f.glsl
 )
 
-add_subdirectory(wraps)
-add_subdirectory(tests)
+if(NOT ANDROID)
+    add_subdirectory(wraps)
+    add_subdirectory(tests)
+endif()

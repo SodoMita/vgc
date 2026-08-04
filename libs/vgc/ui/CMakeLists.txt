@@ -162,5 +162,7 @@ vgc_add_library(ui
         stylesheets/default.vgcss
 )
 
-add_subdirectory(wraps)
-add_subdirectory(tests)
+if(NOT ANDROID)
+    add_subdirectory(wraps)
+    add_subdirectory(tests)
+endif()

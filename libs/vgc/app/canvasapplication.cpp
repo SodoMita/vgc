@@ -19,6 +19,12 @@
 #include <QDir>
 #include <QMessageBox>
 
+#if defined(Q_OS_ANDROID)
+#include <QFile>
+#include <QFileInfo>
+#include <QStandardPaths>
+#endif
+
 #include <vgc/app/filemanager.h>
 #include <vgc/app/logcategories.h>
 #include <vgc/canvas/canvasmanager.h>
@@ -26,6 +32,7 @@
 #include <vgc/canvas/experimental.h>
 #include <vgc/canvas/tooloptionspanel.h>
 #include <vgc/canvas/toolspanel.h>
+#include <vgc/core/paths.h>
 #include <vgc/tools/currentcolor.h>
 #include <vgc/tools/documentcolorpalette.h>
 #include <vgc/tools/order.h>
@@ -50,6 +57,44 @@ const core::Color initialColor(0.416f, 0.416f, 0.918f);
 
 core::StringId s_default_side_area("default-side-area");
 
+#if defined(Q_OS_ANDROID)
+
+// Recursively copies the contents of the directory "srcPath" (given as an
+// "assets:/" Qt URL) to the destination directory "destDir".
+//
+void extractAndroidAssetDir_(const QString& srcPath, const QDir& destDir) {
+    QDir srcDir(srcPath);
+    const QFileInfoList infos =
+        srcDir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const QFileInfo& info : infos) {
+        const QString destPath = destDir.filePath(info.fileName());
+        if (info.isDir()) {
+            destDir.mkdir(info.fileName());
+            extractAndroidAssetDir_(info.absoluteFilePath(), QDir(destPath));
+        }
+        else {
+            QFile::remove(destPath);
+            QFile::copy(info.absoluteFilePath(), destPath);
+        }
+    }
+}
+
+// Extracts the resources bundled as assets of the APK into the directory
+// expected by vgc::core::resourcePath(), i.e., <basePath>/resources, where
+// basePath is the one computed by QtWidgetsApplication::setBasePath().
+//
+// This is necessary because vgc::core reads resources from the filesystem,
+// whereas on Android they are stored inside the APK. Qt6 provides read
+// access to them through the "assets:/" file engine.
+//
+void extractAndroidAssets_(const std::string& basePath) {
+    QDir destRoot(QString::fromStdString(basePath) + "/resources");
+    destRoot.mkpath(".");
+    extractAndroidAssetDir_(QStringLiteral("assets:/resources"), destRoot);
+}
+
+#endif // Q_OS_ANDROID
+
 } // namespace
 
 CanvasApplication::CanvasApplication(
@@ -59,6 +104,13 @@ CanvasApplication::CanvasApplication(
     std::string_view applicationName)
 
     : QtWidgetsApplication(key, argc, argv) {
+
+#if defined(Q_OS_ANDROID)
+    // Extract the resources bundled as APK assets to the filesystem, so that
+    // vgc::core::resourcePath() can find them. This must happen before any
+    // resource is loaded (stylesheet, window icon, fonts, shaders).
+    extractAndroidAssets_(core::basePath());
+#endif
 
     setApplicationName(applicationName);
     window_ = app::MainWindow::create(applicationName);

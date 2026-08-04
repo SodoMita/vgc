@@ -94,5 +94,7 @@ vgc_optional_compile_definition(core PRIVATE VGC_CORE_OBJECT_DEBUG "Enable debug
 
 add_dependencies(vgc_core_lib vgc_version)
 
-add_subdirectory(wraps)
-add_subdirectory(tests)
+if(NOT ANDROID)
+    add_subdirectory(wraps)
+    add_subdirectory(tests)
+endif()

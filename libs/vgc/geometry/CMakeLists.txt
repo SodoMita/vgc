@@ -73,5 +73,7 @@ vgc_add_library(geometry
         tools/vgcgeometry.natvis
 )
 
-add_subdirectory(wraps)
-add_subdirectory(tests)
+if(NOT ANDROID)
+    add_subdirectory(wraps)
+    add_subdirectory(tests)
+endif()

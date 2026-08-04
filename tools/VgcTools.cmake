@@ -483,7 +483,29 @@ function(vgc_add_app APP_NAME)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
     
     # Add executable
-    add_executable(${APP_TARGET} WIN32 ${ARG_CPP_HEADER_FILES} ${ARG_CPP_SOURCE_FILES} ${NATVIS_FILES})
+    if(ANDROID)
+        # On Android, we use Qt's own function to create the app target: it
+        # creates a shared library (lib<target>_<abi>.so) rather than a
+        # regular executable, which is required by androiddeployqt to build
+        # the APK. It also generates the
+        # android-<target>-deployment-settings.json file at finalization
+        # time, which androiddeployqt --input expects.
+        qt_add_executable(${APP_TARGET} ${ARG_CPP_HEADER_FILES} ${ARG_CPP_SOURCE_FILES} ${NATVIS_FILES})
+        # Use a generated "Android package source directory" containing the
+        # app-specific AndroidManifest.xml (copied at configure time from the
+        # "android/" subdirectory of the app source dir) and, at build time,
+        # the resources staged as assets (see below).
+        set_target_properties(${APP_TARGET} PROPERTIES
+            QT_ANDROID_PACKAGE_SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/android_pkg)
+        if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/android/AndroidManifest.xml)
+            file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/android/AndroidManifest.xml
+                 DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/android_pkg)
+        endif()
+    elseif(WIN32)
+        add_executable(${APP_TARGET} WIN32 ${ARG_CPP_HEADER_FILES} ${ARG_CPP_SOURCE_FILES} ${NATVIS_FILES})
+    else()
+        add_executable(${APP_TARGET} ${ARG_CPP_HEADER_FILES} ${ARG_CPP_SOURCE_FILES} ${NATVIS_FILES})
+    endif()
     if(APPLE)
         target_sources(${APP_TARGET} PRIVATE ${ARG_OBJCPP_HEADER_FILES} ${ARG_OBJCPP_SOURCE_FILES})
     endif()
@@ -550,8 +572,21 @@ function(vgc_add_app APP_NAME)
                 FOLDER apps/${APP_NAME}
         )
         add_dependencies(${APP_TARGET} ${RESOURCES_TARGET})
-    endif()    
-    
+    endif()
+
+    # On Android, stage the resources copied to <build>/<config>/resources by
+    # copy_resources.py as assets of the APK. They are extracted at app
+    # startup so that vgc::core::resourcePath() works as on desktop (see
+    # extractAndroidAssets_() in libs/vgc/app/canvasapplication.cpp).
+    if(ANDROID)
+        add_custom_command(TARGET ${APP_TARGET} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_BINARY_DIR}/$<CONFIG>/resources"
+                "${CMAKE_CURRENT_BINARY_DIR}/android_pkg/assets/resources"
+            VERBATIM
+        )
+    endif()
+
     # Ensures the vgc.conf file is generated next to the app
     add_dependencies(${APP_TARGET} vgc_conf)
     
